@@ -1,0 +1,78 @@
+- hosts: controllers
+  remote_user: ubuntu
+  tasks:
+   - name: Create /var/lib/kubernetes directory
+     become: true
+     become_user: root
+     file:
+       path: /var/lib/kubernetes
+       state: directory
+       recurse : yes
+
+   - name: Copies pem files to /var/lib/kubernetes
+     become: true
+     become_user: root
+     copy:
+       src: "{{ item.0 }}"
+       dest: /var/lib/kubernetes
+       remote_src: true
+     with_together:
+       - [ '/home/ubuntu/ca.pem', '/home/ubuntu/kubernetes.pem', '/home/ubuntu/kubernetes-key.pem' ]
+
+   - name: Download binaries
+     get_url:
+       url: "{{ item.0 }}"
+       dest: /home/ubuntu
+       mode: 0550
+     with_together:
+       - [ 'https://storage.googleapis.com/kubernetes-release/release/v1.4.0/bin/linux/amd64/kube-apiserver', 'https://storage.googleapis.com/kubernetes-release/release/v1.4.0/bin/linux/amd64/kube-controller-manager', 'https://storage.googleapis.com/kubernetes-release/release/v1.4.0/bin/linux/amd64/kube-scheduler', 'https://storage.googleapis.com/kubernetes-release/release/v1.4.0/bin/linux/amd64/kubectl' ]
+
+   - name: Move to binaries to /usr/bin
+     become: true
+     become_user: root
+     command: mv /home/ubuntu/kube-apiserver /home/ubuntu/kube-controller-manager /home/ubuntu/kube-scheduler /home/ubuntu/kubectl /usr/bin/
+
+   - name: copies local token.csv to remote controllers
+     become: true
+     become_user: root
+     copy:
+       src: token.csv
+       dest: /var/lib/kubernetes/
+
+   - name: Copies authorization policy to /var/lib/kubernetes
+     become: true
+     become_user: root
+     get_url:
+       url: https://raw.githubusercontent.com/kelseyhightower/kubernetes-the-hard-way/master/authorization-policy.jsonl
+       dest: /var/lib/kubernetes
+
+   - name: Copies kube-api service config from local to remote controller
+     become: true
+     become_user: root
+     copy:
+       src: kube-apiserver.service
+       dest: /etc/systemd/system/
+
+   - name: Copies kube-scheduler.service config file from local to remote controller
+     become: true
+     become_user: root
+     copy:
+       src: kube-scheduler.service
+       dest: /etc/systemd/system/
+
+   - name: Copies kube-controller-manager service config from local to remote controller
+     become: true
+     become_user: root
+     copy:
+       src: kube-controller-manager.service
+       dest: /etc/systemd/system/
+
+
+#Run the below command on all the hosts
+# INTERNAL_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4) && sudo sed -i s/INTERNAL_IP/${INTERNAL_IP}/g /etc/systemd/system/kube-apiserver.service && sudo systemctl daemon-reload && sudo systemctl enable kube-apiserver && sudo systemctl start kube-apiserver
+#
+#
+# INTERNAL_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4) && sudo sed -i s/INTERNAL_IP/${INTERNAL_IP}/g /etc/systemd/system/kube-controller-manager.service && sudo systemctl daemon-reload && sudo systemctl enable kube-controller-manager && sudo systemctl start kube-controller-manager
+#
+#
+# INTERNAL_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4) && sudo sed -i s/INTERNAL_IP/${INTERNAL_IP}/g /etc/systemd/system/kube-scheduler.service && sudo systemctl daemon-reload && sudo systemctl enable kube-scheduler && sudo systemctl start kube-scheduler

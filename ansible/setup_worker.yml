@@ -1,0 +1,148 @@
+- hosts: workers
+  remote_user: ubuntu
+  tasks:
+   - name: Create /var/lib/kubernetes directory
+     become: true
+     become_user: root
+     file:
+       path: /var/lib/kubernetes
+       state: directory
+       recurse : yes
+
+   - name: Copies pem files to /var/lib/kubernetes
+     become: true
+     become_user: root
+     copy:
+       src: "{{ item.0 }}"
+       dest: /var/lib/kubernetes
+       remote_src: true
+     with_together:
+       - [ '/home/ubuntu/ca.pem', '/home/ubuntu/kubernetes.pem', '/home/ubuntu/kubernetes-key.pem' ]
+
+   - name: Download docker binary
+     get_url:
+       url: https://get.docker.com/builds/Linux/x86_64/docker-1.12.1.tgz
+       dest: /home/ubuntu
+
+   - name: Extract docker binaries
+     command: tar -xvzf /home/ubuntu/docker-1.12.1.tgz
+
+   - name: Move to binaries to /usr/bin
+     become: true
+     become_user: root
+     copy:
+       src: "{{ item.0 }}"
+       dest: /usr/bin/
+       remote_src: true
+       mode: 0550
+     with_together:
+       - [ '/home/ubuntu/docker/docker', '/home/ubuntu/docker/docker-containerd', '/home/ubuntu/docker/docker-containerd-ctr', '/home/ubuntu/docker/docker-containerd-shim',  '/home/ubuntu/docker/docker-proxy', '/home/ubuntu/docker/docker-runc', '/home/ubuntu/docker/dockerd' ]
+
+   - name: copies local docker service to remote workers
+     become: true
+     become_user: root
+     copy:
+       src: docker.service
+       dest: /etc/systemd/system/
+
+   - name: Run command
+     become: true
+     become_user: root
+     command: "{{ item.0 }}"
+     with_together:
+       - [ 'systemctl daemon-reload', 'systemctl enable docker', 'systemctl start docker' ]
+
+   - name: Create /opt/cni directory
+     become: true
+     become_user: root
+     file:
+       path: /opt/cni
+       state: directory
+       recurse : yes
+
+   - name: Download cni tar
+     get_url:
+       url: https://storage.googleapis.com/kubernetes-release/network-plugins/cni-07a8a28637e97b22eb8dfe710eeae1344f69d16e.tar.gz
+       dest: /home/ubuntu
+
+   - name: Extract cni tar
+     become: true
+     become_user: root
+     command: tar -xvzf /home/ubuntu/cni-07a8a28637e97b22eb8dfe710eeae1344f69d16e.tar.gz -C /opt/cni
+
+   - name: Download kubectl binary
+     become: true
+     become_user: root
+     get_url:
+       url: https://storage.googleapis.com/kubernetes-release/release/v1.4.0/bin/linux/amd64/kubectl
+       dest: /usr/bin/
+       mode: 0550
+
+   - name: Download kubeproxy api
+     become: true
+     become_user: root
+     get_url:
+       url: https://storage.googleapis.com/kubernetes-release/release/v1.4.0/bin/linux/amd64/kube-proxy
+       dest: /usr/bin/
+       mode: 0550
+
+   - name: Download kubelet api
+     become: true
+     become_user: root
+     get_url:
+       url: https://storage.googleapis.com/kubernetes-release/release/v1.4.0/bin/linux/amd64/kubelet
+       dest: /usr/bin/
+       mode: 0550
+
+   - name: Create /var/lib/kubelet/ directory
+     become: true
+     become_user: root
+     file:
+       path: /var/lib/kubelet/
+       state: directory
+       recurse : yes
+
+   - name: copies local kubeconfig to remote workers
+     become: true
+     become_user: root
+     copy:
+       src: kubeconfig
+       dest: /var/lib/kubelet/kubeconfig
+
+   - name: copies local kubelet to remote workers
+     become: true
+     become_user: root
+     copy:
+       src: kubelet.service
+       dest: /etc/systemd/system/
+
+   - name: Run more command
+     become: true
+     become_user: root
+     command: "{{ item.0 }}"
+     with_together:
+       - [ 'systemctl daemon-reload', 'systemctl enable kubelet', 'systemctl start kubelet' ]
+
+   - name: copies local kubeproxy to remote workers
+     become: true
+     become_user: root
+     copy:
+       src: kube-proxy.service
+       dest: /etc/systemd/system/
+
+   - name: Run more commands
+     become: true
+     become_user: root
+     command: "{{ item.0 }}"
+     with_together:
+       - [ 'systemctl daemon-reload', 'systemctl enable kube-proxy', 'systemctl start kube-proxy' ]
+
+
+#Run the below command on all the hosts
+# INTERNAL_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4) && sudo sed -i s/INTERNAL_IP/${INTERNAL_IP}/g /etc/systemd/system/kube-apiserver.service && sudo systemctl daemon-reload && sudo systemctl enable kube-apiserver && sudo systemctl start kube-apiserver
+#
+#
+# INTERNAL_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4) && sudo sed -i s/INTERNAL_IP/${INTERNAL_IP}/g /etc/systemd/system/kube-controller-manager.service && sudo systemctl daemon-reload && sudo systemctl enable kube-controller-manager && sudo systemctl start kube-controller-manager
+#
+#
+# INTERNAL_IP=$(curl -s http://169.254.169.254/latest/meta-data/local-ipv4) && sudo sed -i s/INTERNAL_IP/${INTERNAL_IP}/g /etc/systemd/system/kube-scheduler.service && sudo systemctl daemon-reload && sudo systemctl enable kube-scheduler && sudo systemctl start kube-scheduler
